@@ -7,9 +7,14 @@ import requests
 
 from rescuetime_secrets import KEY
 
+import logging
+from kython.klogging import setup_logzero
+
 
 
 def main():
+    logger = logging.getLogger('rescuetime-backup')
+    setup_logzero(logger, level=logging.DEBUG)
     today = datetime.today().strftime("%Y-%m-%d")
 
     exc = None
@@ -20,9 +25,9 @@ def main():
                 key=KEY,
                 format='json',
                 perspective='interval',
-                resolution_time='minute',
+                interval='minute',
                 restrict_begin="2017-01-01",
-                restrict_end=today,
+                restrict_end=today, # TODO is this even necessary??
             )
         )
 
@@ -31,7 +36,9 @@ def main():
             return
         else:
             url = res.request.url
+            sys.stderr.buffer.write(res.content)
             exc = RuntimeError(f"Bad status code {res} while requesting {url}")
+            logger.exception(exc)
             time.sleep(60)
     else:
         raise exc
