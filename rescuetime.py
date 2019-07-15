@@ -1,47 +1,54 @@
-#!/usr/bin/env python3.6
-from datetime import datetime
+#!/usr/bin/env python3
+from datetime import datetime, timedelta
+import logging
 import sys
-import time
 
 import requests
+import backoff # type: ignore
 
 from rescuetime_secrets import KEY
 
-import logging
 from kython.klogging import setup_logzero
+from kython.klogging import LazyLogger
 
+
+logger = LazyLogger('rescuetime-backup')
+
+
+class BackoffMe(Exception):
+    pass
+
+
+@backoff.on_exception(backoff.expo, BackoffMe, max_tries=5)
+def run():
+    today = datetime.today()
+    # minute intervals are only allowed with up to a month timespan
+    beg = (today - timedelta(days=30)).strftime('%Y-%m-%d')
+    end = today.strftime('%Y-%m-%d')
+    res = requests.get(
+        "https://www.rescuetime.com/anapi/data",
+        dict(
+            key=KEY,
+            format='json',
+            perspective='interval',
+            interval='minute',
+            restrict_begin=beg,
+            restrict_end=end,
+        )
+    )
+
+    if res.status_code == 200:
+        sys.stdout.buffer.write(res.content)
+    else:
+        logger.error(f"Bad status code {res} while requesting {res.request.url}")
+        logger.error(res.content.decode('utf8'))
+        raise BackoffMe
 
 
 def main():
-    logger = logging.getLogger('rescuetime-backup')
     setup_logzero(logger, level=logging.DEBUG)
-    today = datetime.today().strftime("%Y-%m-%d")
+    run()
 
-    exc = None
-    for att in range(5, 0, -1):
-        res = requests.get(
-            "https://www.rescuetime.com/anapi/data",
-            dict(
-                key=KEY,
-                format='json',
-                perspective='interval',
-                interval='minute',
-                restrict_begin="2017-01-01",
-                restrict_end=today, # TODO is this even necessary??
-            )
-        )
-
-        if res.status_code == 200:
-            sys.stdout.buffer.write(res.content)
-            return
-        else:
-            url = res.request.url
-            sys.stderr.buffer.write(res.content)
-            exc = RuntimeError(f"Bad status code {res} while requesting {url}")
-            logger.exception(exc)
-            time.sleep(60)
-    else:
-        raise exc
 
 if __name__ == '__main__':
     main()
