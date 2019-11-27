@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 import json
 from datetime import datetime, timedelta
-from typing import NamedTuple, Dict, List, Set, Optional
+from typing import NamedTuple, Dict, List, Set, Optional, Sequence, Any, Union, Iterator, TypeVar
 from functools import lru_cache
 
 
@@ -20,6 +20,7 @@ def try_load(fp: Path):
     try:
         return json.loads(fp.read_text())
     except Exception as e:
+        # TODO FIXME ?? maybe verify that on export stage instead?
         if 'Expecting value' in str(e):
             logger.warning(f"Corrupted: {fp}")
         else:
@@ -46,6 +47,43 @@ class Entry(NamedTuple):
         # TODO utc??
         dt = datetime.strptime(dt_s, _DT_FMT)
         return Entry(dt=dt, duration_s=dur, activity=activity)
+
+PathIsh = Union[str, Path]
+Json = Dict[str, Any]
+
+
+T = TypeVar('T')
+Res = Union[Exception, T]
+
+
+class Model:
+    def __init__(self, sources: Sequence[PathIsh]) -> None:
+        self.sources = list(sorted(map(Path, sources)))
+        # TODO sort it just in case??
+
+    def iter_raw(self) -> Iterator[Res[Json]]: # TODO rename it??
+        # TODO -latest thing??
+        emitted: Set[Any] = set()
+
+        for src in self.sources:
+            # TODO FIXME dedup
+            j = json.loads(src.read_text())
+            headers = j['row_headers']
+            rows = j['rows']
+
+            total = len(rows)
+            unique = 0
+
+            for row in rows:
+                frow = tuple(row) # freeze for hashing
+                if frow not in emitted:
+                    emitted.add(frow)
+                    unique += 1
+                    yield dict(zip(headers, row))
+            print(f"{src}: filtered out {total - unique}/{total}")
+
+    # def iter_entries(self) -> Iterator[Res[Entry]]:
+    #     for raw in it
 
 
 @lru_cache(1)
@@ -76,6 +114,16 @@ def get_rescuetime(latest: Optional[int]=None):
     res = sorted(entries, key=fget(Entry.dt))
     return res
 
+def main():
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument('path', type=Path)
+    args = p.parse_args()
+    files = list(sorted(args.path.glob('*.json')))[:10]
+    model = Model(files)
+    for x in model.iter_raw():
+        pass
+        # print(x)
 
 if __name__ == '__main__':
-    pass
+    main()
