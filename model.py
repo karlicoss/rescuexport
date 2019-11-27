@@ -7,7 +7,7 @@ from typing import NamedTuple, Dict, List, Set, Optional, Sequence, Any, Union, 
 from functools import lru_cache
 
 
-from kython import JSONType, fget, group_by_cmp
+from kython import JSONType # type: ignore
 
 
 def get_logger():
