@@ -13,20 +13,9 @@ from kython import JSONType, fget, group_by_cmp
 def get_logger():
     return logging.getLogger("rescuetime-provider")
 
-_PATH = Path("/L/backups/rescuetime")
 
-def try_load(fp: Path):
-    logger = get_logger()
-    try:
-        return json.loads(fp.read_text())
-    except Exception as e:
-        # TODO FIXME ?? maybe verify that on export stage instead?
-        if 'Expecting value' in str(e):
-            logger.warning(f"Corrupted: {fp}")
-        else:
-            raise e
-    return None
-
+PathIsh = Union[str, Path]
+Json = Dict[str, Any]
 
 _DT_FMT = "%Y-%m-%dT%H:%M:%S"
 
@@ -36,20 +25,23 @@ class Entry(NamedTuple):
     duration_s: int
     activity: str
 
-    @staticmethod
-    def from_row(row: List):
-        COL_DT = 0
-        COL_DUR = 1
-        COL_ACTIVITY = 3
+    @classmethod
+    def from_row(cls, row: Json) -> 'Entry':
+        # COL_DT = 0
+        # COL_DUR = 1
+        # COL_ACTIVITY = 3
+        # TODO I think cols are fixed so could speed up lookup? Not really necessary at te moment though
+        COL_DT = 'Date'
+        COL_DUR = 'Time Spent (seconds)'
+        COL_ACTIVITY = 'Activity'
+
         dt_s     = row[COL_DT]
         dur      = row[COL_DUR]
         activity = row[COL_ACTIVITY]
+        # TODO FIXME!!
         # TODO utc??
         dt = datetime.strptime(dt_s, _DT_FMT)
-        return Entry(dt=dt, duration_s=dur, activity=activity)
-
-PathIsh = Union[str, Path]
-Json = Dict[str, Any]
+        return cls(dt=dt, duration_s=dur, activity=activity)
 
 
 T = TypeVar('T')
@@ -59,15 +51,19 @@ Res = Union[Exception, T]
 class Model:
     def __init__(self, sources: Sequence[PathIsh]) -> None:
         self.sources = list(sorted(map(Path, sources)))
-        # TODO sort it just in case??
+        self.logger = get_logger()
 
     def iter_raw(self) -> Iterator[Res[Json]]: # TODO rename it??
         # TODO -latest thing??
         emitted: Set[Any] = set()
 
         for src in self.sources:
-            # TODO FIXME dedup
-            j = json.loads(src.read_text())
+            try:
+                # TODO parse in multiple processes??
+                j = json.loads(src.read_text())
+            except Exception as e:
+                raise RuntimeError(f'While processing {src}') from e
+
             headers = j['row_headers']
             rows = j['rows']
 
@@ -80,49 +76,37 @@ class Model:
                     emitted.add(frow)
                     unique += 1
                     yield dict(zip(headers, row))
-            print(f"{src}: filtered out {total - unique}/{total}")
+            self.logger.debug(f"{src}: filtered out {total - unique:<6} of {total:<6}. Grand total: {len(emitted)}")
 
-    # def iter_entries(self) -> Iterator[Res[Entry]]:
-    #     for raw in it
-
-
-@lru_cache(1)
-def get_rescuetime(latest: Optional[int]=None):
-    if latest is None:
-        latest = 0
-
-    entries: Set[Entry] = set()
-
-    # pylint: disable=invalid-unary-operand-type
-    for fp in list(sorted(_PATH.glob('*.json')))[-latest:]:
-        j = try_load(fp)
-        if j is None:
-            continue
-
-        cols = j['row_headers']
-        seen = 0
-        total = 0
-        for row in j['rows']:
-            e = Entry.from_row(row)
-            total += 1
-            if e in entries:
-                seen += 1
+    # TODO why did I use lru cache??
+    def iter_entries(self) -> Iterator[Res[Entry]]:
+        last = None
+        for row in self.iter_raw():
+            if isinstance(row, Exception):
+                yield row
+                continue
+            cur = Entry.from_row(row)
+            if last is not None and cur.dt < last.dt:
+                yield RuntimeError(f'Expected {cur} to be later than {last}')
             else:
-                entries.add(e)
-        print(f"{fp}: {seen}/{total}")
-        # print(len(j))
-    res = sorted(entries, key=fget(Entry.dt))
-    return res
+                yield cur
+                last = cur
+                # TODO shit, for couple of days it was pretty bad, lots of duplicated entries..
+
 
 def main():
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+
     import argparse
     p = argparse.ArgumentParser()
     p.add_argument('path', type=Path)
     args = p.parse_args()
-    files = list(sorted(args.path.glob('*.json')))[:10]
+    files = list(sorted(args.path.glob('*.json')))
     model = Model(files)
-    for x in model.iter_raw():
-        pass
+    for x in model.iter_entries():
+        if isinstance(x, Exception):
+            print(x)
         # print(x)
 
 if __name__ == '__main__':
