@@ -56,6 +56,7 @@ class Model:
     def iter_raw(self) -> Iterator[Res[Json]]: # TODO rename it??
         # TODO -latest thing??
         emitted: Set[Any] = set()
+        last = None
 
         for src in self.sources:
             try:
@@ -72,31 +73,35 @@ class Model:
 
             for row in rows:
                 frow = tuple(row) # freeze for hashing
-                if frow not in emitted:
+                if frow in emitted:
+                    continue
+                drow = dict(zip(headers, row))
+                if last is not None and drow['Date'] < last['Date']:
+                    yield RuntimeError(f'Expected\n{drow}\nto be later than\n{last}')
+                    # TODO ugh, for couple of days it was pretty bad, lots of duplicated entries..
+                    # for now, just ignore it
+                else:
+                    yield drow
                     emitted.add(frow)
                     unique += 1
-                    yield dict(zip(headers, row))
+                last = drow
+
             self.logger.debug(f"{src}: filtered out {total - unique:<6} of {total:<6}. Grand total: {len(emitted)}")
 
     # TODO why did I use lru cache??
     def iter_entries(self) -> Iterator[Res[Entry]]:
-        last = None
         for row in self.iter_raw():
             if isinstance(row, Exception):
                 yield row
                 continue
             cur = Entry.from_row(row)
-            if last is not None and cur.dt < last.dt:
-                yield RuntimeError(f'Expected {cur} to be later than {last}')
-            else:
-                yield cur
-                last = cur
-                # TODO shit, for couple of days it was pretty bad, lots of duplicated entries..
+            yield cur
 
 
 def main():
     import logging
     logging.basicConfig(level=logging.DEBUG)
+    logger = get_logger()
 
     import argparse
     p = argparse.ArgumentParser()
@@ -104,9 +109,14 @@ def main():
     args = p.parse_args()
     files = list(sorted(args.path.glob('*.json')))
     model = Model(files)
+    count = 0
     for x in model.iter_entries():
         if isinstance(x, Exception):
-            print(x)
+            logger.error(x)
+        else:
+            count += 1
+            if count % 10000 == 0:
+                logger.info('Processed %d entries', count)
         # print(x)
 
 if __name__ == '__main__':
