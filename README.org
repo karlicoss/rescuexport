@@ -1,0 +1,3 @@
+
+Note that this script only backs up last 30 days of data.
+If you need to export *all* of your Resquetime data, a bit of extra work is required (pretty straightforward though!)
