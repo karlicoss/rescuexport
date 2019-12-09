@@ -76,7 +76,7 @@ class Model:
                 if frow in emitted:
                     continue
                 drow = dict(zip(headers, row))
-                if last is not None and drow['Date'] < last['Date']:
+                if last is not None and drow['Date'] < last['Date']: # pylint: disable=unsubscriptable-object
                     yield RuntimeError(f'Expected\n{drow}\nto be later than\n{last}')
                     # TODO ugh, for couple of days it was pretty bad, lots of duplicated entries..
                     # for now, just ignore it
