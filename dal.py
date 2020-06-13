@@ -7,9 +7,6 @@ from typing import NamedTuple, Dict, List, Set, Optional, Sequence, Any, Union, 
 from functools import lru_cache
 
 
-from kython import JSONType # type: ignore
-
-
 def get_logger():
     return logging.getLogger("rescuetime-provider")
 
@@ -48,7 +45,7 @@ T = TypeVar('T')
 Res = Union[Exception, T]
 
 
-class Model:
+class DAL:
     def __init__(self, sources: Sequence[PathIsh]) -> None:
         self.sources = list(sorted(map(Path, sources)))
         self.logger = get_logger()
@@ -108,7 +105,7 @@ def main():
     p.add_argument('path', type=Path)
     args = p.parse_args()
     files = list(sorted(args.path.glob('*.json')))
-    model = Model(files)
+    model = DAL(files)
     count = 0
     for x in model.iter_entries():
         if isinstance(x, Exception):

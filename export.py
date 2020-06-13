@@ -7,11 +7,7 @@ import logging
 import requests
 import backoff # type: ignore
 
-from kython.klogging import setup_logzero
-from kython.klogging import LazyLogger
-
-
-logger = LazyLogger('rescuetime-backup')
+logger = logging.getLogger(__name__)
 
 
 class BackoffMe(Exception):
@@ -49,11 +45,7 @@ def get_json(**params):
 
 
 def main():
-    setup_logzero(logger, level=logging.DEBUG)
-    from export_helper import setup_parser
-    parser = argparse.ArgumentParser("Tool to export your personal Rescuetime data")
-    setup_parser(parser=parser, params=['key'])
-
+    parser = make_parser()
     args = parser.parse_args()
 
     params = args.params
@@ -62,6 +54,13 @@ def main():
     j = get_json(**params)
     js = json.dumps(j, ensure_ascii=False, indent=1)
     dumper(js)
+
+
+def make_parser():
+    from export_helper import setup_parser, Parser
+    parser = Parser("Tool to export your personal Rescuetime data")
+    setup_parser(parser=parser, params=['key'])
+    return parser
 
 
 if __name__ == '__main__':
