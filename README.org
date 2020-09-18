@@ -1,3 +1,58 @@
+#+begin_src python :dir src :results drawer :exports results
+import rescuexport.export as E
+return E.make_parser().prog
+#+end_src
 
-Note that this script only backs up last 30 days of data.
-If you need to export *all* of your Resquetime data, a bit of extra work is required (pretty straightforward though!)
+#+RESULTS:
+:results:
+Tool to export your personal Rescuetime data
+:end:
+
+# TODO document this??
+# Note that this script only backs up last 30 days of data.
+# If you need to export *all* of your Resquetime data, a bit of extra work is required (pretty straightforward though!)
+
+* Setting up
+
+The easiest is to run =pip3 install --user 'git+https://github.com/karlicoss/rescuexport'=.
+
+Alternatively, you can =git clone --recursive= and use =pip3 install --ediable=
+
+* Exporting
+
+#+begin_src python :dir src :results drawer :exports results
+import rescuexport.export as E
+return E.make_parser().epilog
+#+end_src
+
+#+RESULTS:
+:results:
+
+Usage:
+
+*Recommended*: create =secrets.py= keeping your api parameters, e.g.:
+
+
+: key = "KEY"
+
+
+After that, use:
+
+: ./export.py --secrets /path/to/secrets.py
+
+That way you type less and have control over where you keep your plaintext secrets.
+
+*Alternatively*, you can pass parameters directly, e.g.
+
+: ./export.py --key <key>
+
+However, this is verbose and prone to leaking your keys/tokens/passwords in shell history.
+
+
+
+I *highly* recommend checking exported files at least once just to make sure they contain everything you expect from your export. If not, please feel free to ask or raise an issue!
+
+:end:
+
+# FIXME ./export.py is no longer correct way...
+# eh, gonna need to somehow pass the package name into export_helper??

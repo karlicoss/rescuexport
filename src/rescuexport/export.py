@@ -57,7 +57,7 @@ def main():
 
 
 def make_parser():
-    from export_helper import setup_parser, Parser
+    from .exporthelpers.export_helper import setup_parser, Parser
     parser = Parser("Tool to export your personal Rescuetime data")
     setup_parser(parser=parser, params=['key'])
     return parser
