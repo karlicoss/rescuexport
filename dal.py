@@ -4,7 +4,6 @@ from pathlib import Path
 import json
 from datetime import datetime, timedelta
 from typing import NamedTuple, Dict, List, Set, Optional, Sequence, Any, Union, Iterator, TypeVar
-from functools import lru_cache
 
 
 def get_logger():
@@ -14,7 +13,8 @@ def get_logger():
 PathIsh = Union[str, Path]
 Json = Dict[str, Any]
 
-_DT_FMT = "%Y-%m-%dT%H:%M:%S"
+
+_DT_FMT = '%Y-%m-%dT%H:%M:%S'
 
 class Entry(NamedTuple):
     # TODO ugh, appears to be local time...
@@ -41,26 +41,30 @@ class Entry(NamedTuple):
         return cls(dt=dt, duration_s=dur, activity=activity)
 
 
+# todo dal helper
 T = TypeVar('T')
 Res = Union[Exception, T]
 
 
 class DAL:
     def __init__(self, sources: Sequence[PathIsh]) -> None:
+        # todo do ininstance check (so cpath works)
         self.sources = list(sorted(map(Path, sources)))
         self.logger = get_logger()
 
     def iter_raw(self) -> Iterator[Res[Json]]: # TODO rename it??
-        # TODO -latest thing??
         emitted: Set[Any] = set()
         last = None
 
         for src in self.sources:
+            # todo parse in multiple processes??
             try:
-                # TODO parse in multiple processes??
                 j = json.loads(src.read_text())
             except Exception as e:
-                raise RuntimeError(f'While processing {src}') from e
+                ex = RuntimeError(f'While processing {src}')
+                ex.__cause__ = e
+                yield ex
+                continue
 
             headers = j['row_headers']
             rows = j['rows']
@@ -85,14 +89,57 @@ class DAL:
 
             self.logger.debug(f"{src}: filtered out {total - unique:<6} of {total:<6}. Grand total: {len(emitted)}")
 
-    # TODO why did I use lru cache??
-    def iter_entries(self) -> Iterator[Res[Entry]]:
+    def entries(self) -> Iterator[Res[Entry]]:
         for row in self.iter_raw():
             if isinstance(row, Exception):
                 yield row
                 continue
             cur = Entry.from_row(row)
             yield cur
+
+    # todo depercate
+    iter_entries = entries
+
+
+# todo quick test (dal helper aided: check that DAL can handle fake data)
+def fake_data_generator(rows=100, seed=123):
+    # todo ok, use faker/mimesis here??
+    from random import Random
+    r = Random(seed)
+
+    def row_gen():
+        base = datetime(year=2000, month=1, day=1)
+        cur = base
+        emitted = 0
+        i = 0
+        while emitted < rows:
+            i += 1
+            sleeping = 1 <= cur.hour <= 8
+            if sleeping:
+                cur = cur + timedelta(hours=2)
+                continue
+
+            # do something during that period
+            duration = r.randint(10, 500)
+
+            if r.choice([True, False]):
+                emitted += 1
+                yield [
+                    cur.strftime(_DT_FMT),
+                    duration,
+                    1,
+                    f'Activity {i % 10}',
+                    'Category {i % 3}',
+                    i % 2,
+                ]
+            cur += timedelta(seconds=duration)
+
+
+    return {
+        "notes": "data is an array of arrays (rows), column names for rows in row_headers",
+        "row_headers": ["Date", "Time Spent (seconds)", "Number of People", "Activity", "Category", "Productivity"],
+        "rows": list(row_gen())
+    }
 
 
 def main():
