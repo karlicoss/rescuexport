@@ -3,23 +3,31 @@ import logging
 from pathlib import Path
 import json
 from datetime import datetime, timedelta
-from typing import NamedTuple, Dict, List, Set, Optional, Sequence, Any, Union, Iterator, TypeVar
+from typing import Set, Sequence, Any, Iterator
+from dataclasses import dataclass
 
+from .exporthelpers.dal_helper import PathIsh, Json, Res, datetime_naive
+from .exporthelpers.logging_helper import LazyLogger
 
-def get_logger():
-    return logging.getLogger("rescuetime-provider")
+logger = LazyLogger(__package__)
 
-
-PathIsh = Union[str, Path]
-Json = Dict[str, Any]
-
+seconds = int
 
 _DT_FMT = '%Y-%m-%dT%H:%M:%S'
 
-class Entry(NamedTuple):
-    # TODO ugh, appears to be local time...
-    dt: datetime
-    duration_s: int
+@dataclass
+class Entry:
+    dt: datetime_naive
+    '''
+    Ok, it definitely seems local, by the looks of the data.
+
+    https://www.rescuetime.com/apidoc#analytic-api-reference
+    "defined by the user’s selected time zone" -- not sure what it means, but another clue I suppose
+
+    Note that the manual export has something like -08:00, but it's the time is same as local -- doesn't make any sense...
+    '''
+
+    duration_s: seconds
     activity: str
 
     @classmethod
@@ -27,7 +35,7 @@ class Entry(NamedTuple):
         # COL_DT = 0
         # COL_DUR = 1
         # COL_ACTIVITY = 3
-        # TODO I think cols are fixed so could speed up lookup? Not really necessary at te moment though
+        # todo I think cols are fixed so could speed up lookup? Not really necessary at te moment though
         COL_DT = 'Date'
         COL_DUR = 'Time Spent (seconds)'
         COL_ACTIVITY = 'Activity'
@@ -35,24 +43,17 @@ class Entry(NamedTuple):
         dt_s     = row[COL_DT]
         dur      = row[COL_DUR]
         activity = row[COL_ACTIVITY]
-        # TODO FIXME!!
-        # TODO utc??
         dt = datetime.strptime(dt_s, _DT_FMT)
         return cls(dt=dt, duration_s=dur, activity=activity)
 
 
-# todo dal helper
-T = TypeVar('T')
-Res = Union[Exception, T]
-
-
 class DAL:
     def __init__(self, sources: Sequence[PathIsh]) -> None:
-        # todo do ininstance check (so cpath works)
-        self.sources = list(sorted(map(Path, sources)))
-        self.logger = get_logger()
+        # todo not sure if should sort -- probably best to rely on get_files?
+        self.sources = [p if isinstance(p, Path) else Path(p) for p in sources]
 
-    def iter_raw(self) -> Iterator[Res[Json]]: # TODO rename it??
+    def raw_entries(self) -> Iterator[Res[Json]]:
+        # todo rely on more_itertools for it?
         emitted: Set[Any] = set()
         last = None
 
@@ -87,22 +88,20 @@ class DAL:
                     unique += 1
                 last = drow
 
-            self.logger.debug(f"{src}: filtered out {total - unique:<6} of {total:<6}. Grand total: {len(emitted)}")
+            logger.debug(f"{src}: filtered out {total - unique:<6} of {total:<6}. Grand total: {len(emitted)}")
 
     def entries(self) -> Iterator[Res[Entry]]:
-        for row in self.iter_raw():
+        for row in self.raw_entries():
             if isinstance(row, Exception):
                 yield row
                 continue
             cur = Entry.from_row(row)
             yield cur
 
-    # todo depercate
-    iter_entries = entries
 
-
+from typing import Iterable
 # todo quick test (dal helper aided: check that DAL can handle fake data)
-def fake_data_generator(rows=100, seed=123):
+def fake_data_generator(rows=100, seed=123) -> Json:
     # todo ok, use faker/mimesis here??
     from random import Random
     r = Random(seed)
@@ -142,11 +141,8 @@ def fake_data_generator(rows=100, seed=123):
     }
 
 
-def main():
-    import logging
-    logging.basicConfig(level=logging.DEBUG)
-    logger = get_logger()
-
+def main() -> None:
+    # todo adapt for dal_helper?
     import argparse
     p = argparse.ArgumentParser()
     p.add_argument('path', type=Path)
@@ -154,7 +150,7 @@ def main():
     files = list(sorted(args.path.glob('*.json')))
     model = DAL(files)
     count = 0
-    for x in model.iter_entries():
+    for x in model.entries():
         if isinstance(x, Exception):
             logger.error(x)
         else:
