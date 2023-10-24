@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-import logging
+import argparse
+import json  # TODO use orjson for parsing?
 from pathlib import Path
-import json
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Set, Sequence, Any, Iterator
-from dataclasses import dataclass
 
-from .exporthelpers.dal_helper import PathIsh, Json, Res, datetime_naive
-from .exporthelpers.logging_helper import LazyLogger
+from .exporthelpers.dal_helper import PathIsh, Json, Res, datetime_naive, pathify
+from .exporthelpers.logging_helper import make_logger
 
-logger = LazyLogger(__package__)
+logger = make_logger(__package__)
 
 seconds = int
 
 _DT_FMT = '%Y-%m-%dT%H:%M:%S'
+
 
 @dataclass
 class Entry:
@@ -40,17 +41,18 @@ class Entry:
         COL_DUR = 'Time Spent (seconds)'
         COL_ACTIVITY = 'Activity'
 
+        # fmt: off
         dt_s     = row[COL_DT]
         dur      = row[COL_DUR]
         activity = row[COL_ACTIVITY]
+        # fmt: on
         dt = datetime.strptime(dt_s, _DT_FMT)
         return cls(dt=dt, duration_s=dur, activity=activity)
 
 
 class DAL:
     def __init__(self, sources: Sequence[PathIsh]) -> None:
-        # todo not sure if should sort -- probably best to rely on get_files?
-        self.sources = [p if isinstance(p, Path) else Path(p) for p in sources]
+        self.sources = list(map(pathify, sources))
 
     def raw_entries(self) -> Iterator[Res[Json]]:
         # todo rely on more_itertools for it?
@@ -58,6 +60,7 @@ class DAL:
         last = None
 
         for src in self.sources:
+            logger.info(f'{src}: processing...')
             # todo parse in multiple processes??
             try:
                 j = json.loads(src.read_text())
@@ -74,11 +77,11 @@ class DAL:
             unique = 0
 
             for row in rows:
-                frow = tuple(row) # freeze for hashing
+                frow = tuple(row)  # freeze for hashing
                 if frow in emitted:
                     continue
                 drow = dict(zip(headers, row))
-                if last is not None and drow['Date'] < last['Date']: # pylint: disable=unsubscriptable-object
+                if last is not None and drow['Date'] < last['Date']:
                     yield RuntimeError(f'Expected\n{drow}\nto be later than\n{last}')
                     # TODO ugh, for couple of days it was pretty bad, lots of duplicated entries..
                     # for now, just ignore it
@@ -99,11 +102,11 @@ class DAL:
             yield cur
 
 
-from typing import Iterable
 # todo quick test (dal helper aided: check that DAL can handle fake data)
 def fake_data_generator(rows=100, seed=123) -> Json:
     # todo ok, use faker/mimesis here??
     from random import Random
+
     r = Random(seed)
 
     def row_gen():
@@ -133,17 +136,15 @@ def fake_data_generator(rows=100, seed=123) -> Json:
                 ]
             cur += timedelta(seconds=duration)
 
-
     return {
         "notes": "data is an array of arrays (rows), column names for rows in row_headers",
         "row_headers": ["Date", "Time Spent (seconds)", "Number of People", "Activity", "Category", "Productivity"],
-        "rows": list(row_gen())
+        "rows": list(row_gen()),
     }
 
 
 def main() -> None:
     # todo adapt for dal_helper?
-    import argparse
     p = argparse.ArgumentParser()
     p.add_argument('path', type=Path)
     args = p.parse_args()
@@ -158,6 +159,7 @@ def main() -> None:
             if count % 10000 == 0:
                 logger.info('Processed %d entries', count)
         # print(x)
+
 
 if __name__ == '__main__':
     main()
