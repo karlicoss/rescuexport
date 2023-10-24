@@ -46,7 +46,7 @@ class Entry:
         dur      = row[COL_DUR]
         activity = row[COL_ACTIVITY]
         # fmt: on
-        dt = datetime.strptime(dt_s, _DT_FMT)
+        dt = datetime.fromisoformat(dt_s)  # much much faster than strptime!
         return cls(dt=dt, duration_s=dur, activity=activity)
 
 
