@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-import argparse
 from datetime import datetime, timedelta
 import json
-import logging
 
+import backoff
 import requests
-import backoff # type: ignore
 
-logger = logging.getLogger(__name__)
+from .exporthelpers.export_helper import setup_parser, Parser
+from .exporthelpers.logging_helper import make_logger
+
+
+logger = make_logger(__name__)
 
 
 class BackoffMe(Exception):
@@ -29,7 +31,7 @@ def run(key: str):
             interval='minute',
             restrict_begin=beg,
             restrict_end=end,
-        )
+        ),
     )
 
     if res.status_code == 200:
@@ -57,7 +59,6 @@ def main():
 
 
 def make_parser():
-    from .exporthelpers.export_helper import setup_parser, Parser
     parser = Parser("Tool to export your personal Rescuetime data")
     setup_parser(parser=parser, params=['key'])
     return parser
