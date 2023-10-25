@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 import argparse
+from concurrent.futures import Executor
 import json  # TODO use orjson for parsing?
 from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Set, Sequence, Any, Iterator
+from typing import Set, Sequence, Any, Iterator, Optional
 
 from .exporthelpers.dal_helper import PathIsh, Json, Res, datetime_naive, pathify
 from .exporthelpers.logging_helper import make_logger
+from .utils import DummyFuture
 
-logger = make_logger(__package__)
+logger = make_logger(__name__)
 
 seconds = int
 
@@ -50,26 +52,51 @@ class Entry:
         return cls(dt=dt, duration_s=dur, activity=activity)
 
 
+# TODO crap. marshalling json via thread pool might take longer than actually processing in single process?
+# e.g. if we change this to just return read_text(), there is no such overhead
+def _json_load_path(p: Path) -> Json:
+    # TODO hmm kinda annoying that we have to keep logging here,
+    # otherwise we will log at the time the future is submitted
+    logger.info(f'processing {p}')
+    jj = json.loads(p.read_text())
+    # NOTE: this makes it slightly faster during concurrent processing
+    # (about 10% although also while processing compressed files)
+    # for now let's not do that until we decide some generic way to approach it
+    # would be nice if json parser just returned tuples instead in the first place
+    # jj['rows'] = tuple(map(tuple, jj['rows']))
+    return jj
+
+
 class DAL:
-    def __init__(self, sources: Sequence[PathIsh]) -> None:
+    def __init__(self, sources: Sequence[PathIsh], *, cpu_pool: Optional[Executor] = None) -> None:
         self.sources = list(map(pathify, sources))
+        self.cpu_pool = cpu_pool
 
     def raw_entries(self) -> Iterator[Res[Json]]:
-        # todo rely on more_itertools for it?
+        cpu_pool = self.cpu_pool
+
+        futures = []
+        for src in self.sources:
+            if cpu_pool is not None:
+                future = cpu_pool.submit(_json_load_path, src)
+            else:
+                future = DummyFuture(_json_load_path, src)
+
+            futures.append(future)
+
+        # todo rely on more_itertools for emitting unique items?
         emitted: Set[Any] = set()
         last = None
-
-        for src in self.sources:
-            logger.info(f'{src}: processing...')
-            # todo parse in multiple processes??
+        for src, future in zip(self.sources, futures):
             try:
-                j = json.loads(src.read_text())
+                j = future.result()
             except Exception as e:
                 ex = RuntimeError(f'While processing {src}')
                 ex.__cause__ = e
                 yield ex
                 continue
 
+            # TODO hmm ijson might be quite nice here...
             headers = j['row_headers']
             rows = j['rows']
 
@@ -77,6 +104,7 @@ class DAL:
             unique = 0
 
             for row in rows:
+                # TODO hmm kinda annoying that using orjson.dumps as hash is faster than tuple hashing???
                 frow = tuple(row)  # freeze for hashing
                 if frow in emitted:
                     continue
