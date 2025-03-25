@@ -1,13 +1,13 @@
-#!/usr/bin/env python3
 import argparse
-from concurrent.futures import Executor
 import json  # TODO use orjson for parsing?
-from pathlib import Path
+from collections.abc import Iterator, Sequence
+from concurrent.futures import Executor
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Set, Sequence, Any, Iterator, Optional
+from pathlib import Path
+from typing import Any, Optional
 
-from .exporthelpers.dal_helper import PathIsh, Json, Res, datetime_naive, pathify
+from .exporthelpers.dal_helper import Json, PathIsh, Res, datetime_naive, pathify
 from .exporthelpers.logging_helper import make_logger
 from .utils import DummyFuture
 
@@ -25,7 +25,7 @@ class Entry:
     Ok, it definitely seems local, by the looks of the data.
 
     https://www.rescuetime.com/apidoc#analytic-api-reference
-    "defined by the user’s selected time zone" -- not sure what it means, but another clue I suppose
+    "defined by the user's selected time zone" -- not sure what it means, but another clue I suppose
 
     Note that the manual export has something like -08:00, but it's the time is same as local -- doesn't make any sense...
     '''
@@ -85,14 +85,14 @@ class DAL:
             futures.append(future)
 
         # todo rely on more_itertools for emitting unique items?
-        emitted: Set[Any] = set()
+        emitted: set[Any] = set()
         last = None
         for src, future in zip(self.sources, futures):
             try:
                 j = future.result()
             except Exception as e:
                 ex = RuntimeError(f'While processing {src}')
-                ex.__cause__ = e
+                ex.__cause__ = e  # TODO use add_note
                 yield ex
                 continue
 
@@ -176,7 +176,7 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument('path', type=Path)
     args = p.parse_args()
-    files = list(sorted(args.path.glob('*.json')))
+    files = sorted(args.path.glob('*.json'))
     model = DAL(files)
     count = 0
     for x in model.entries():
