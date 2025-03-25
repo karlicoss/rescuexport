@@ -1,43 +1,46 @@
 # see https://github.com/karlicoss/pymplate for up-to-date reference
 [project]
 dynamic = ["version"]  # version is managed by setuptools_scm
-name = "rescueexport"
-dependencies = [
-    "requests",
-    "backoff",
-]
-# TODO maybe split out DAL deps and export deps? might be nice
+name = "rescuexport"
+dependencies = []
+requires-python = ">=3.9"
 
 ## these need to be set if you're planning to upload to pypi
-# description = "TODO"
-# license = {file = "LICENSE"}
-# authors = [
-#     {name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"},
-# ]
-# maintainers = [
-#     {name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"},
-# ]
-#
-# [project.urls]
-# Homepage = "https://github.com/karlicoss/pymplate"
+description = "Backup and access your Rescuetime data"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"},
+]
+maintainers = [
+    {name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"},
+]
+
+[project.urls]
+Homepage = "https://github.com/karlicoss/rescuexport"
 ##
+
 
 [project.optional-dependencies]
 dal = []
 export = [
     "requests",
-    "backoff",
+    "tenacity",  # for retrying API calls
 ]
 optional = [
     "orjson",  # faster json processing
     "colorlog",
     "ijson",  # faster iterative json processing
 ]
+
+
+[dependency-groups]
 testing = [
     "pytest",
     "ruff",
     "mypy",
     "lxml",  # for mypy html coverage
+
+    "types-requests",
 ]
 
 
@@ -48,3 +51,8 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools_scm]
 version_scheme = "python-simplified-semver"
 local_scheme = "dirty-tag"
+
+# workaround for error during uv publishing
+# see https://github.com/astral-sh/uv/issues/9513#issuecomment-2519527822
+[tool.setuptools]
+license-files = []
