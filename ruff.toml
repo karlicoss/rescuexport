@@ -1,8 +1,3 @@
-# NOTE: version is inferred from pyproject.toml if present
-#   however, if ruff.toml is separate, pyproject isn't even parsed..
-#   see https://github.com/astral-sh/ruff/issues/10299
-target-version = "py39"
-
 lint.extend-select = [
     "F",    # flakes rules -- default, but extend just in case
     "E",    # pycodestyle  -- default, but extend just in case
@@ -142,4 +137,6 @@ lint.ignore = [
     "SIM",     # some if statements crap
     "RSE102",  # complains about missing parens in exceptions
     ##
+
+    "PLC0415", # "imports should be at the top level" -- not realistic
 ]
