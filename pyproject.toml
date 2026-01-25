@@ -2,20 +2,18 @@
 [project]
 dynamic = ["version"]  # version is managed by build backend
 name = "rescuexport"
-dependencies = []
-requires-python = ">=3.9"
-
-## these need to be set if you're planning to upload to pypi
-description = "Backup and access your Rescuetime data"
-license = {file = "LICENSE"}
-authors = [
-    {name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"},
+dependencies = [
+    "rescuexport[export,dal]",  # TODO backwards compatibility -- remove later?
 ]
-maintainers = [
-    {name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"},
-]
+requires-python = ">=3.12"
 
-[project.urls]
+## these are only useful for pypi
+description = "Backup and access your Rescuetime data"  # shows on project page/in search
+license     = {file = "LICENSE"}
+authors     = [{name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"}]
+maintainers = [{name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"}]
+
+[project.urls]  # pypi will fetch some github stats/link, so somewhat useful
 Homepage = "https://github.com/karlicoss/rescuexport"
 ##
 
@@ -34,20 +32,24 @@ optional = [
 
 
 [dependency-groups]
+# TODO: not sure, on the one hand could just use 'standard' dev dependency group
+# On the other hand, it's a bit annoying that it's always included by default? 
+# To make sure it's not included, need to use `uv run --exact --no-default-groups ...`
 testing = [
-    "pytest",
+    "pytest>=9",  # need version 9 for proper namespace package support
     "ruff",
+
+    "rescuexport[dal,export,optional]",
+]
+typecheck = [
     "mypy",
-    "lxml",  # for mypy html coverage
+    "lxml", # for mypy html coverage
+    "ty>=0.0.13",
 
     "types-requests",
+
+    { include-group = "testing" },
 ]
-
-
-# workaround for error during uv publishing
-# see https://github.com/astral-sh/uv/issues/9513#issuecomment-2519527822
-[tool.setuptools]
-license-files = []
 
 
 [build-system]

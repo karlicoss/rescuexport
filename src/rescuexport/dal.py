@@ -5,9 +5,9 @@ from concurrent.futures import Executor
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-from .exporthelpers.dal_helper import Json, PathIsh, Res, datetime_naive, pathify
+from .exporthelpers.dal_helper import Json, Res, datetime_naive, pathify
 from .exporthelpers.logging_helper import make_logger
 from .utils import DummyFuture
 
@@ -68,7 +68,7 @@ def _json_load_path(p: Path) -> Json:
 
 
 class DAL:
-    def __init__(self, sources: Sequence[PathIsh], *, cpu_pool: Optional[Executor] = None) -> None:
+    def __init__(self, sources: Sequence[Path | str], *, cpu_pool: Executor | None = None) -> None:
         self.sources = list(map(pathify, sources))
         self.cpu_pool = cpu_pool
 
@@ -87,7 +87,7 @@ class DAL:
         # todo rely on more_itertools for emitting unique items?
         emitted: set[Any] = set()
         last = None
-        for src, future in zip(self.sources, futures):
+        for src, future in zip(self.sources, futures, strict=True):
             try:
                 j = future.result()
             except Exception as e:
@@ -108,7 +108,7 @@ class DAL:
                 frow = tuple(row)  # freeze for hashing
                 if frow in emitted:
                     continue
-                drow = dict(zip(headers, row))
+                drow = dict(zip(headers, row, strict=True))
                 if last is not None and drow['Date'] < last['Date']:
                     yield RuntimeError(f'Expected\n{drow}\nto be later than\n{last}')
                     # TODO ugh, for couple of days it was pretty bad, lots of duplicated entries..
