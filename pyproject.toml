@@ -125,7 +125,7 @@ lint.ignore = [
     "DTZ",   # datetimes checks -- complaining about missing tz and mostly false positives
     "FIX",   # complains about fixmes/todos -- annoying
     "TD",    # complains about todo formatting -- too annoying
-    "ANN",   # missing type annotations? seems way to strict though
+    "ANN",   # missing type annotations? seems way too strict though
     "EM" ,   # suggests assigning all exception messages into a variable first... pretty annoying
 
 ### too opinionated style checks
@@ -135,9 +135,9 @@ lint.ignore = [
     "E501",  # too long lines
     "E731",  # assigning lambda instead of using def
     "E741",  # Ambiguous variable name: `l`
-    "E742",  # Ambiguous class name: `O
+    "E742",  # Ambiguous class name: `O`
     "E401",  # Multiple imports on one line
-    "F403",  # import *` used; unable to detect undefined names
+    "F403",  # `import *` used; unable to detect undefined names
 ###
 
 ###
@@ -159,7 +159,7 @@ lint.ignore = [
 ###
     "PLR0402",  # import X.Y as Y -- TODO maybe consider enabling it, but double check
 
-    "B009",  # calling gettattr with constant attribute -- this is useful to convince mypy
+    "B009",  # calling getattr with constant attribute -- this is useful to convince mypy
     "B010",  # same as above, but setattr
     "B017",  # pytest.raises(Exception)
     "B023",  # seems to result in false positives?
@@ -168,18 +168,18 @@ lint.ignore = [
     # this is common for click entrypoints (e.g. in __main__), so disable
     "PIE790",
 
-    # a bit too annoying, offers to convert for loops to list comprehension
-    # , which may heart readability
+    # a bit too annoying, offers to convert for loops to a list comprehension,
+    #   which may hurt readability
     "PERF401",
 
-    # suggests no using exception in for loops
+    # suggests not using exceptions in for loops
     # we do use this technique a lot, plus in 3.11 happy path exception handling is "zero-cost"
     "PERF203",
 
     "RET504", # unnecessary assignment before returning -- that can be useful for readability
     "RET505", # unnecessary else after return -- can hurt readability
 
-    "PLC1901",  # suggests using `if string` instead of `strinig == ""` -- dumb.
+    "PLC1901",  # suggests using `if string` instead of `string == ""` -- dumb.
 
     "PLW0603",  # global variable update.. we usually know why we are doing this
     "PLW2901",  # for loop variable overwritten, usually this is intentional
@@ -206,9 +206,9 @@ lint.ignore = [
     "INP001",  # complains about implicit namespace packages
     "SIM102",  # if statements collapsing, often hurts readability
     "SIM103",  # multiple conditions collapsing, often hurts readability
-    "SIM105",  # suggests using contextlib.suppress instad of try/except -- this wouldn't be mypy friendly
+    "SIM105",  # suggests using contextlib.suppress instead of try/except -- this wouldn't be mypy friendly
     "SIM108",  # suggests using ternary operation instead of if -- hurts readability
-    "SIM110",  # suggests using any(...) instead of for look/return -- hurts readability
+    "SIM110",  # suggests using any(...) instead of for loop/return -- hurts readability
     "SIM117",  # suggests using single with statement instead of nested -- doesn't work in tests
     "RSE102",  # complains about missing parens in exceptions
     ##
@@ -266,7 +266,7 @@ min_version = "4"
 env_list = ["ruff", "format", "tests", "mypy", "ty"]
 
 # https://github.com/tox-dev/tox/issues/20#issuecomment-247788333
-# Hack to prevent .tox from crapping to the project directory.
+# Hack to prevent .tox from crapping into the project directory.
 work_dir = "{env:TOXWORKDIR_BASE:}{tox_root}{/}.tox"
 
 [tool.tox.env_run_base]
@@ -285,8 +285,13 @@ pass_env = [
 # Generally this is more robust and safer, and prevents weird issues later on.
 set_env.PYTHONSAFEPATH = "1"
 
+# Useful when a project defines multiple mypy environments that run in parallel.
+# Separate caches avoid SQLite locking errors.
+set_env.MYPY_CACHE_DIR = "{env:MYPY_CACHE_DIR:{tox_root}{/}.mypy_cache}{/}{env_name}"
+
 # Relying on https://github.com/tox-dev/tox-uv for the runners here.
-# Using the lock runner as the default since it's the only one supporting tool.uv.sources, which some projects need.
+# This template deliberately defaults to the lock runner even though pymplate itself does not use tool.uv.sources.
+# Projects based on it may use tool.uv.sources, and keeping one runner avoids changing tox semantics later.
 runner = "uv-venv-lock-runner"
 # The lock runner requires a lock file, which is slightly annoying since we're not tracking lock files (see .gitignore).
 # By default it would also check that running tox won't change the lock file.
@@ -301,7 +306,7 @@ uv_sync_locked = false
 
 
 [tool.tox.env.ruff]
-skip_install = true
+package = "skip"
 dependency_groups = ["testing"]
 commands = [
     [
@@ -313,7 +318,7 @@ commands = [
 
 
 [tool.tox.env.format]
-skip_install = true
+package = "skip"
 dependency_groups = ["testing"]
 commands = [
     [
