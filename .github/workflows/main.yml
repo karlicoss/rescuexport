@@ -28,13 +28,23 @@ on:
     - cron: '31 18 * * 5'  # run every Friday
 
 
+permissions:
+  contents: read  # repos created before 2023 have write permissions as default. Protects against compromised actions.
+
+
 jobs:
   build:
     strategy:
       fail-fast: false
       matrix:
-        platform: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ['3.12', '3.13', '3.14']
+        platform:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+        python-version:
+          - &minimum_python '3.12'
+          - '3.13'
+          - '3.14'
         # vvv just an example of excluding stuff from matrix
         # exclude: [{platform: macos-latest, python-version: '3.6'}]
 
@@ -44,12 +54,14 @@ jobs:
     # continue-on-error: ${{ matrix.platform == 'windows-latest' }}
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
+        persist-credentials: false
         submodules: recursive
         fetch-depth: 0  # nicer to have all git history when debugging/for tests
 
-    - uses: astral-sh/setup-uv@v8.1.0
+    # setup-uv doesn't publish floating major/minor tags, so use an exact full tag.
+    - uses: astral-sh/setup-uv@v10.0.1
       with:
         python-version: ${{ matrix.python-version }}
         enable-cache: false  # we don't have lock files during initial CI checkout, so can't use them as cache key
