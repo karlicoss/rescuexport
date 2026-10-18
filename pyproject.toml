@@ -3,6 +3,8 @@
 dynamic = ["version"]  # version is managed by build backend
 name = "rescuexport"
 dependencies = [
+    "hpikit",
+    "kloggy",
     "rescuexport[export,dal]",  # TODO backwards compatibility -- remove later?
 ]
 requires-python = ">=3.12"
@@ -20,15 +22,14 @@ Homepage = "https://github.com/karlicoss/rescuexport"
 
 
 [project.optional-dependencies]
-dal = []
+dal = ["koncurrent"]
 export = [
     "requests",
     "tenacity",  # for retrying API calls
 ]
 optional = [
-    "orjson",  # faster json processing
-    "colorlog",
-    "ijson",  # faster iterative json processing
+    "hpikit[optional]", # faster JSON parsing and transparent compression
+    "kloggy[enlighten]",  # progress bars, shown when KLOGGY_PROGRESS is set, e.g. KLOGGY_PROGRESS=enlighten
 ]
 
 [dependency-groups]

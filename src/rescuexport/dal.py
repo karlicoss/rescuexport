@@ -1,17 +1,19 @@
 import argparse
-import json  # TODO use orjson for parsing?
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Iterable, Iterator, Sequence
 from concurrent.futures import Executor
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from .exporthelpers.dal_helper import Json, Res, datetime_naive, pathify
-from .exporthelpers.logging_helper import make_logger
-from .utils import DummyFuture
+import koncurrent
+from hpikit.datetime import NaiveDateTime, naive
+from hpikit.json import Json, loads
+from hpikit.paths import as_paths
+from kloggy import get_logger
+from kloggy.progress import progress
 
-logger = make_logger(__name__)
+logger = get_logger(__name__)
 
 seconds = int
 
@@ -20,7 +22,7 @@ _DT_FMT = '%Y-%m-%dT%H:%M:%S'
 
 @dataclass
 class Entry:
-    dt: datetime_naive
+    dt: NaiveDateTime
     '''
     Ok, it definitely seems local, by the looks of the data.
 
@@ -48,17 +50,14 @@ class Entry:
         dur      = row[COL_DUR]
         activity = row[COL_ACTIVITY]
         # fmt: on
-        dt = datetime.fromisoformat(dt_s)  # much much faster than strptime!
+        dt = naive(datetime.fromisoformat(dt_s))  # much much faster than strptime!
         return cls(dt=dt, duration_s=dur, activity=activity)
 
 
 # TODO crap. marshalling json via thread pool might take longer than actually processing in single process?
 # e.g. if we change this to just return read_text(), there is no such overhead
 def _json_load_path(p: Path) -> Json:
-    # TODO hmm kinda annoying that we have to keep logging here,
-    # otherwise we will log at the time the future is submitted
-    logger.info(f'processing {p}')
-    jj = json.loads(p.read_text())
+    jj = loads(p.read_bytes())
     # NOTE: this makes it slightly faster during concurrent processing
     # (about 10% although also while processing compressed files)
     # for now let's not do that until we decide some generic way to approach it
@@ -68,31 +67,31 @@ def _json_load_path(p: Path) -> Json:
 
 
 class DAL:
-    def __init__(self, sources: Sequence[Path | str], *, cpu_pool: Executor | None = None) -> None:
-        self.sources = list(map(pathify, sources))
-        self.cpu_pool = cpu_pool
+    def __init__(self, sources: Sequence[Path | str]) -> None:
+        self.sources = as_paths(sources)
 
-    def raw_entries(self) -> Iterator[Res[Json]]:
-        cpu_pool = self.cpu_pool
+        # where to parse the files -- None means koncurrent's shared default, serial unless configured otherwise
+        # set these before iterating to override, e.g. dal.executor = ThreadPoolExecutor(4)
+        self.executor: Executor | None = None
+        self.buffersize: int | None = None  # None: twice the executor's number of workers, or 1 when running serially
 
-        futures = []
-        for src in self.sources:
-            if cpu_pool is not None:
-                future = cpu_pool.submit(_json_load_path, src)
-            else:
-                future = DummyFuture(_json_load_path, src)
+    def raw_entries(self) -> Generator[Json | Exception, None, None]:
+        with koncurrent.map_results(
+            _json_load_path, self.sources, executor=self.executor, buffersize=self.buffersize
+        ) as results:
+            # Track results as they are consumed, so queued executor work doesn't advance the bar prematurely.
+            # Log each path before waiting for its result, including before parsing in serial mode.
+            files = progress(self.sources, logger=logger, unit='files')
+            yield from self._entries_from_results(zip(files, results, strict=True))
 
-            futures.append(future)
-
+    def _entries_from_results(self, results: Iterable[tuple[Path, Json | Exception]]) -> Iterator[Json | Exception]:
         # todo rely on more_itertools for emitting unique items?
         emitted: set[Any] = set()
         last = None
-        for src, future in zip(self.sources, futures, strict=True):
-            try:
-                j = future.result()
-            except Exception as e:
+        for src, j in results:
+            if isinstance(j, Exception):
                 ex = RuntimeError(f'While processing {src}')
-                ex.__cause__ = e  # TODO use add_note
+                ex.__cause__ = j  # TODO use add_note
                 yield ex
                 continue
 
@@ -121,7 +120,7 @@ class DAL:
 
             logger.debug(f"{src}: filtered out {total - unique:<6} of {total:<6}. Grand total: {len(emitted)}")
 
-    def entries(self) -> Iterator[Res[Entry]]:
+    def entries(self) -> Iterator[Entry | Exception]:
         for row in self.raw_entries():
             if isinstance(row, Exception):
                 yield row

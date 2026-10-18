@@ -1,8 +1,12 @@
+import argparse
 import json
 import logging
 from datetime import datetime, timedelta
 
+import hpikit.cli.export as cli
 import requests
+from hpikit.json import Json
+from kloggy import get_logger
 from tenacity import (
     before_sleep_log,
     retry,
@@ -11,10 +15,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from .exporthelpers.export_helper import Json, Parser, setup_parser
-from .exporthelpers.logging_helper import make_logger
-
-logger = make_logger(__name__)
+logger = get_logger(__name__)
 
 
 class RetryMe(Exception):
@@ -60,17 +61,15 @@ def main() -> None:
     parser = make_parser()
     args = parser.parse_args()
 
-    params = args.params
-    dumper = args.dumper
+    params = cli.get_params(parser, args)
 
     j = get_json(**params)
     js = json.dumps(j, ensure_ascii=False, indent=1)
-    dumper(js)
+    cli.dump(js, path=args.path)
 
 
-def make_parser():
-    parser = Parser("Tool to export your personal Rescuetime data")
-    setup_parser(parser=parser, params=['key'])
+def make_parser() -> argparse.ArgumentParser:
+    parser = cli.make_parser(description="Tool to export your personal Rescuetime data", params=['key'])
     return parser
 
 
